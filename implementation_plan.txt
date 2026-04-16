@@ -1,0 +1,108 @@
+# Pharmacy Delivery App Architecture
+
+This document describes the proposed architecture for the Pharmacy Delivery App, using React Native (Frontend), Golang (Backend), and PostgreSQL (Database).
+
+## High-Level Architecture
+
+```mermaid
+graph TD
+    A[React Native App\nCustomers/Drivers] -->|REST / WebSockets| B[API Gateway / Backend]
+    
+    subgraph Golang Backend Services
+        C[HTTP Handlers/Controllers]
+        D[Business Logic / Usecases]
+        E[Data Repositories]
+    end
+    
+    B --> C
+    C --> D
+    D --> E
+    
+    E --> F[(PostgreSQL Database)]
+    
+    %% External Integrations
+    D --> G[Payment Gateway\ne.g., Stripe]
+    D --> H[Maps API\nLocation/Routing]
+    D --> I[Push Notifications\nFirebase/APNs]
+```
+
+## Development Approach: Modular Monolith
+For the initial version, the backend will be a **Modular Monolith**. This keeps deployment and development simple while allowing components to be easily split into microservices later if scaling demands it.
+
+## Database Architecture (PostgreSQL)
+
+Key tables/entities needed:
+1.  **Users**: Customer accounts, delivery drivers, and pharmacy staff (role-based).
+2.  **Pharmacies**: Pharmacy business details, location (PostGIS for geo-queries), and operational hours.
+3.  **Products/Medicines**: Inventory items linked to pharmacies, prices, descriptions, and prescription flags.
+4.  **Orders**: Order metadata, total cost, and status (`pending`, `accepted`, `ready`, `out_for_delivery`, `delivered`).
+5.  **OrderItems**: Mapping of specific products to an Order.
+6.  **DeliveryTracking**: Real-time tracking of drivers attached to an order.
+
+## Backend Architecture (Golang)
+
+We will use **Clean Architecture** to separate concerns, making the backend highly testable and maintainable.
+
+### Proposed Tech Stack
+*   **Web Framework**: **Gin** (Fast, standard, and easy to use).
+*   **Database ORM/Driver**: **GORM** (Robust ORM for Go) or **sqlc** for raw performance. *(GORM recommended to start)*
+*   **Authentication**: JWT for stateless session management.
+*   **Migrations**: `golang-migrate`.
+
+### Folder Structure (Standard Go Layout)
+```
+/backend
+├── cmd/
+│   └── api/
+│       └── main.go       # Entry point
+├── internal/
+│   ├── domain/           # Core models and interfaces (User, Order)
+│   ├── delivery/
+│   │   └── http/         # API routes and controllers (Gin handlers)
+│   ├── usecase/          # Business logic implementation
+│   └── repository/       # Postgres implementation of domain interfaces
+├── pkg/                  # Reusable utility packages (logger, config)
+└── config/               # Environment and DB config
+```
+
+## Frontend Architecture (React Native)
+
+The frontend will start as an integrated app where views can adapt based on the user type (e.g., Customer vs Driver).
+
+### Proposed Tech Stack
+*   **Framework**: **Expo** (Recommended for rapid development and testing on actual devices).
+*   **State Management**: **Zustand** (simpler and less boilerplate than Redux).
+*   **Navigation**: **React Navigation** (Stack and Tab navigators).
+*   **API Client**: **Axios** combined with **React Query** for caching server state.
+*   **Styling**: **NativeWind** (Tailwind CSS for React Native) to ensure a modern, dynamic, and premium look.
+
+### Folder Structure
+```
+/frontend
+├── src/
+│   ├── assets/           # Images, icons, fonts
+│   ├── components/       # Reusable UI elements (Buttons, Cards)
+│   ├── navigation/       # Route definitions
+│   ├── screens/          # Full screen pages (Home, Cart, Profile)
+│   ├── services/         # API calling layer (Axios setup)
+│   ├── store/            # Global state (Zustand)
+│   └── theme/            # Colors, spacing, typography
+└── App.tsx               # App entry
+```
+
+## Key Workflows
+
+1.  **Catalog Browsing**: User searches for medicine -> Backend queries DB matching name/geo-location -> Returns results.
+2.  **Checkout & Order**: User proceeds to checkout -> Payment intent generated -> Order created with `pending` status -> Notification sent to Pharmacy.
+3.  **Fulfillment**: Pharmacy accepts order -> Status updates to `ready` -> Driver assigned.
+4.  **Delivery**: Driver picks up -> WebSockets stream location to Customer App -> Order marked `delivered`.
+
+## Open Questions
+
+> [!CAUTION]
+> Please review and provide input on the following to finalize the plan:
+
+1.  **Backend ORM**: Do you prefer `GORM` (easier, feature-rich) or `sqlc` / raw SQL (better performance but more manual)?
+2.  **Frontend Setup**: Is using `Expo` acceptable, or do you have a strict requirement for bare `React Native CLI`?
+3.  **Prescriptions**: Will users need the ability to upload images of their medical prescriptions for certain drugs?
+4.  **Styling**: Are you okay with using `NativeWind` (Tailwind for React Native) to achieve a modern and dynamic UX quickly, or do you prefer standard `StyleSheet`?
